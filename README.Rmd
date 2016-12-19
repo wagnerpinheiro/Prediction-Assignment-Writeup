@@ -3,8 +3,8 @@ title: "Prediction Assignment Writeup"
 author: "Wagner Pinheiro"
 date: "December 2016"
 output:
-  html_document: default
   html_notebook: default
+  html_document: default
 ---
 
 ## Introduction
