@@ -1,0 +1,154 @@
+---
+title: "Prediction Assignment Writeup"
+author: "Wagner Pinheiro"
+date: "December 2016"
+output:
+  html_document: default
+  html_notebook: default
+---
+
+## Introduction
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+
+## Getting and Cleaning the Training data
+
+Removing the data with NA and with values close to zero
+
+```{r, echo=FALSE}
+# install.packages("caret")
+library(caret)
+
+set.seed(45145)
+
+if(!file.exists("data/pml-training.csv")){
+  download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", "data/pml-training.csv")
+} 
+training <- read.csv("./data/pml-training.csv",header=T, na.string=c("NA", "#DIV/0!",""))
+classes <- sapply(training, class)
+# training$classe <- as.factor(training$classe)
+training <- training[,-nearZeroVar(training)]
+# training <- training[,-c(1,2,3,4,5,6,7)]
+training <- training[,-c(1,2,3,4,5)]
+training <- na.omit(training)
+dim(training)
+```
+
+
+So, we partition the dataset (70%-30%) to measure the acurancy of the models.
+
+
+```{r}
+inTrain  <- createDataPartition(training$classe, p=0.7, list=FALSE)
+TrainSet <- training[inTrain, ]
+TestSet  <- training[-inTrain, ]
+dim(TrainSet)
+```
+
+
+```{r}
+dim(TestSet)
+```
+
+## Model Building
+
+Three popular methods will be applied to model the regressions (in the Train dataset) and the best one (with higher accuracy when applied to the Test dataset) will be used for the quiz predictions. The methods are: Random Forests, Decision Tree and Generalized Boosted Model, as described below. A Confusion Matrix is plotted at the end of each analysis to better visualize the accuracy of the models.
+
+
+### 1. Random Forests
+
+```{r}
+# model fit
+controlRF <- trainControl(method="cv", number=3, verboseIter=FALSE)
+modFitRandForest <- train(classe ~ ., data=TrainSet, method="rf",
+                          trControl=controlRF)
+modFitRandForest$finalModel
+```
+
+
+```{r}
+predictRandForest <- predict(modFitRandForest, newdata=TestSet)
+confMatRandForest <- confusionMatrix(predictRandForest, TestSet$classe)
+confMatRandForest
+```
+
+```{r}
+# plot matrix results
+plot(confMatRandForest$table, col = confMatRandForest$byClass, 
+     main = paste("Random Forest - Accuracy =",
+                  round(confMatRandForest$overall['Accuracy'], 4)))
+```
+
+
+### 2. Decision Tree
+
+```{r}
+# install.packages(c("rpart", "rpart.plot","rattle"))
+library(rpart)
+library(rpart.plot)
+library(rattle)
+# model fit
+modFitDecTree <- rpart(classe ~ ., data=TrainSet, method="class")
+fancyRpartPlot(modFitDecTree)
+```
+
+
+```{r}
+# prediction on Test dataset
+predictDecTree <- predict(modFitDecTree, newdata=TestSet, type="class")
+confMatDecTree <- confusionMatrix(predictDecTree, TestSet$classe)
+confMatDecTree
+```
+
+```{r}
+# plot matrix results
+plot(confMatDecTree$table, col = confMatDecTree$byClass, 
+     main = paste("Decision Tree - Accuracy =",
+                  round(confMatDecTree$overall['Accuracy'], 4)))
+```
+
+
+### 3. Generalized Boosted Model (GBM)
+
+```{r}
+# model fit
+controlGBM <- trainControl(method = "repeatedcv", number = 5, repeats = 1)
+modFitGBM  <- train(classe ~ ., data=TrainSet, method = "gbm",
+                    trControl = controlGBM, verbose = FALSE)
+
+modFitGBM$finalModel
+```
+
+
+
+```{r}
+# prediction on Test dataset
+predictGBM <- predict(modFitGBM, newdata=TestSet)
+confMatGBM <- confusionMatrix(predictGBM, TestSet$classe)
+confMatGBM
+```
+
+```{r}
+# plot matrix results
+plot(confMatGBM$table, col = confMatGBM$byClass, 
+     main = paste("GBM - Accuracy =", round(confMatGBM$overall['Accuracy'], 4)))
+```
+
+
+## Predicting the testing data
+
+```{r}
+
+if(!file.exists("./data/pml-testing.csv")){
+  download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", "./data/pml-testing.csv")
+}
+testing  <- read.csv("./data/pml-testing.csv", colClasses = classes, header=T, na.string=c("NA", "#DIV/0!", ""))
+classes2 <- sapply(testing, class)
+testing <- testing[,-c(1,2,3,4,5)]
+#testing <- sapply(testing, as.numeric)
+# predictTEST <- predict(modFitRandForest, newdata=testing)
+predictTEST <- predict(modFitDecTree, newdata=testing)
+# predictTEST <- predict(modFitGBM, newdata=testing)
+predictTEST
+```
